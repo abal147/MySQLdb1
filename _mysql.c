@@ -124,6 +124,10 @@ static int _mysql_server_init_done = 0;
 #define HAVE_MYSQL_OPT_TIMEOUTS 1
 #endif
 
+#if MYSQL_VERSION_ID > 50606
+#define HAVE_MYSQL_CONNECTION_ATTRIBUTES 1
+#endif
+
 PyObject *
 _mysql_Exception(_mysql_ConnectionObject *c)
 {
@@ -559,6 +563,9 @@ _mysql_ConnectionObject_Initialize(
 		*db = NULL, *unix_socket = NULL;
 	unsigned int port = 0;
 	unsigned int client_flag = 0;
+#ifdef HAVE_MYSQL_CONNECTION_ATTRIBUTES
+	PyObject *connection_attributes = NULL;
+#endif
 	static char *kwlist[] = { "host", "user", "passwd", "db", "port",
 				  "unix_socket", "conv",
 				  "connect_timeout", "compress",
@@ -569,6 +576,9 @@ _mysql_ConnectionObject_Initialize(
 #ifdef HAVE_MYSQL_OPT_TIMEOUTS
                                   "read_timeout",
                                   "write_timeout",
+#endif
+#ifdef HAVE_MYSQL_CONNECTION_ATTRIBUTES
+				  "connection_attributes",
 #endif
 				  NULL } ;
 	int connect_timeout = 0;
@@ -586,7 +596,9 @@ _mysql_ConnectionObject_Initialize(
 	check_server_init(-1);
 
 	if (!PyArg_ParseTupleAndKeywords(args, kwargs,
-#ifdef HAVE_MYSQL_OPT_TIMEOUTS
+#ifdef HAVE_MYSQL_CONNECTION_ATTRIBUTES
+                                         "|ssssisOiiisssiOiiiO:connect",
+#elif HAVE_MYSQL_OPT_TIMEOUTS
                                          "|ssssisOiiisssiOiii:connect",
 #else
                                          "|ssssisOiiisssiOi:connect",
@@ -603,6 +615,9 @@ _mysql_ConnectionObject_Initialize(
 #ifdef HAVE_MYSQL_OPT_TIMEOUTS
                      , &read_timeout
                      , &write_timeout
+#endif
+#ifdef HAVE_MYSQL_CONNECTION_ATTRIBUTES
+                     , &connection_attributes
 #endif
 	))
 		return -1;
@@ -649,6 +664,23 @@ _mysql_ConnectionObject_Initialize(
 		unsigned int timeout = write_timeout;
 		mysql_options(&(self->connection), MYSQL_OPT_WRITE_TIMEOUT,
 				(char *)&timeout);
+	}
+#endif
+#ifdef HAVE_MYSQL_CONNECTION_ATTRIBUTES
+	if (connection_attributes && PyDict_Check(connection_attributes)) {
+		mysql_options(&(self->connection),
+			      MYSQL_OPT_CONNECT_ATTR_RESET,
+			      0);
+		PyObject *key, *value;
+		Py_ssize_t pos = 0;
+		while (PyDict_Next(connection_attributes, &pos, &key, &value)) {
+			if (PyString_Check(key) && PyString_Check(value)) {
+				mysql_options4((&self->connection),
+					       MYSQL_OPT_CONNECT_ATTR_ADD,
+					       PyString_AsString(key),
+					       PyString_AsString(value));
+			}
+		}
 	}
 #endif
 	if (compress != -1) {
