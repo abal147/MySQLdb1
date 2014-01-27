@@ -674,7 +674,8 @@ _mysql_ConnectionObject_Initialize(
 		PyObject *key, *value;
 		Py_ssize_t pos = 0;
 		while (PyDict_Next(connection_attributes, &pos, &key, &value)) {
-			if (PyString_Check(key) && PyString_Check(value)) {
+			if ((PyString_Check(key) || PyUnicode_Check(key)) &&
+			    (PyString_Check(value) || PyUnicode_Check(value))) {
 				mysql_options4((&self->connection),
 					       MYSQL_OPT_CONNECT_ATTR_ADD,
 					       PyString_AsString(key),
