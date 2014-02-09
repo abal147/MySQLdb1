@@ -9,7 +9,7 @@ from time import time
 import array
 import unittest
 from configdb import connection_factory
-
+from MySQLdb import cursors
 
 class DatabaseTest(unittest.TestCase):
 
@@ -99,6 +99,34 @@ class DatabaseTest(unittest.TestCase):
         finally:
             if not self.debug:
                 self.cursor.execute('drop table %s' % (self.table))
+
+    def test_nonblocking(self):
+        from MySQLdb.constants import ASYNC
+        args = dict(self.connect_kwargs)
+        args['nonblocking'] = True
+        conn = connection_factory(**args)
+        status = ASYNC.NET_ASYNC_NOT_READY
+        while status == ASYNC.NET_ASYNC_NOT_READY:
+            status = conn.nonblocking_connect_run()
+            print("conn not yet")
+
+        cursor = conn.cursor(cursorclass=cursors.NBCursor)
+        status = cursor.execute("SELECT SLEEP(0.05) UNION SELECT SLEEP(0.05)")
+        while status == ASYNC.NET_ASYNC_NOT_READY:
+            print("query not yet")
+            status = cursor.execute_nonblocking()
+
+        print("query done")
+        status = ASYNC.NET_ASYNC_NOT_READY
+        while True:
+            print("checking for row")
+            status, row = cursor.fetchone_nonblocking()
+            print(status)
+            print(row)
+            if not row:
+                break
+        print("yay done")
+
 
     def test_transactions(self):
         columndefs = ( 'col1 INT', 'col2 VARCHAR(255)')

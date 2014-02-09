@@ -7,6 +7,7 @@ override Connection.default_cursor with a non-standard Cursor class.
 
 """
 from MySQLdb import cursors
+from MySQLdb.constants import ASYNC
 from _mysql_exceptions import Warning, Error, InterfaceError, DataError, \
      DatabaseError, OperationalError, IntegrityError, InternalError, \
      NotSupportedError, ProgrammingError
@@ -148,7 +149,7 @@ class Connection(_mysql.connection):
         documentation for the MySQL C API for some hints on what they do.
 
         """
-        from MySQLdb.constants import CLIENT, FIELD_TYPE
+        from MySQLdb.constants import CLIENT
         from MySQLdb.converters import conversions
         from weakref import proxy
 
@@ -168,15 +169,15 @@ class Connection(_mysql.connection):
         kwargs2['conv'] = conv2
 
         cursorclass = kwargs2.pop('cursorclass', self.default_cursor)
-        charset = kwargs2.pop('charset', '')
+        self._c_charset = kwargs2.pop('charset', '')
 
-        if charset:
-            use_unicode = True
+        if self._c_charset:
+            self.use_unicode = True
         else:
-            use_unicode = False
+            self.use_unicode = False
 
-        use_unicode = kwargs2.pop('use_unicode', use_unicode)
-        sql_mode = kwargs2.pop('sql_mode', '')
+        self.use_unicode = kwargs2.pop('use_unicode', self.use_unicode)
+        self._c_sql_mode = kwargs2.pop('sql_mode', '')
 
         client_flag = kwargs.get('client_flag', 0)
         client_version = tuple([ numeric_part(n) for n in _mysql.get_client_info().split('.')[:2] ])
@@ -188,14 +189,12 @@ class Connection(_mysql.connection):
         kwargs2['client_flag'] = client_flag
 
         # PEP-249 requires autocommit to be initially off
-        autocommit = kwargs2.pop('autocommit', False)
-
+        self._c_enable_autocommit = kwargs2.pop('autocommit', False)
+        self._c_nonblocking = kwargs2.get("nonblocking", False)
         super(Connection, self).__init__(*args, **kwargs2)
         self.cursorclass = cursorclass
         self.encoders = dict([ (k, v) for k, v in conv.items()
                                if type(k) is not int ])
-
-        self._server_version = tuple([ numeric_part(n) for n in self.get_server_info().split('.')[:2] ])
 
         db = proxy(self)
         def _get_string_literal():
@@ -213,28 +212,45 @@ class Connection(_mysql.connection):
                 return s.decode(string_decoder.charset)
             return string_decoder
 
-        string_literal = _get_string_literal()
-        self.unicode_literal = unicode_literal = _get_unicode_literal()
+        self._c_string_literal = _get_string_literal()
+        self._c_unicode_literal = unicode_literal = _get_unicode_literal()
         self.string_decoder = string_decoder = _get_string_decoder()
-        if not charset:
-            charset = self.character_set_name()
-        self.set_character_set(charset)
 
-        if sql_mode:
-            self.set_sql_mode(sql_mode)
+        if not self._c_charset:
+            self._c_charset = self.character_set_name()
 
-        if use_unicode:
-            self.converter[FIELD_TYPE.STRING].append((None, string_decoder))
-            self.converter[FIELD_TYPE.VAR_STRING].append((None, string_decoder))
-            self.converter[FIELD_TYPE.VARCHAR].append((None, string_decoder))
-            self.converter[FIELD_TYPE.BLOB].append((None, string_decoder))
+        if not self._c_nonblocking:
+            self._post_connect_init()
 
-        self.encoders[types.StringType] = string_literal
-        self.encoders[types.UnicodeType] = unicode_literal
+    def nonblocking_connect_run(self):
+        ret = super(Connection, self).nonblocking_connect_run()
+        if ret == ASYNC.NET_ASYNC_COMPLETE:
+            self._post_connect_init()
+        return ret
+
+    def _post_connect_init(self):
+        """Perform post-connection initialization; in non-blocking mode, some
+        settings are omitted such as sql_mode and autocommit."""
+        from MySQLdb.constants import CLIENT, FIELD_TYPE
+        self._server_version = tuple([ numeric_part(n) for n in self.get_server_info().split('.')[:2] ])
+
+        self.set_character_set(self._c_charset)
+
+        if self._c_sql_mode and not self._c_nonblocking:
+            self.set_sql_mode(self._c_sql_mode)
+
+        if self.use_unicode:
+            self.converter[FIELD_TYPE.STRING].append((None, self.string_decoder))
+            self.converter[FIELD_TYPE.VAR_STRING].append((None, self.string_decoder))
+            self.converter[FIELD_TYPE.VARCHAR].append((None, self.string_decoder))
+            self.converter[FIELD_TYPE.BLOB].append((None, self.string_decoder))
+
+        self.encoders[types.StringType] = self._c_string_literal
+        self.encoders[types.UnicodeType] = self._c_unicode_literal
         self._transactional = self.server_capabilities & CLIENT.TRANSACTIONS
         if self._transactional:
-            if autocommit is not None:
-                self.autocommit(autocommit)
+            if self._c_enable_autocommit is not None and not self._c_nonblocking:
+                self.autocommit(self._c_enable_autocommit)
         self.messages = []
 
     def autocommit(self, on):
@@ -316,7 +332,7 @@ class Connection(_mysql.connection):
                 self.query('SET NAMES %s' % charset)
                 self.store_result()
         self.string_decoder.charset = py_charset
-        self.unicode_literal.charset = py_charset
+        self._c_unicode_literal.charset = py_charset
 
     def set_sql_mode(self, sql_mode):
         """Set the connection sql_mode. See MySQL documentation for
