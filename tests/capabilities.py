@@ -108,24 +108,20 @@ class DatabaseTest(unittest.TestCase):
         status = ASYNC.NET_ASYNC_NOT_READY
         while status == ASYNC.NET_ASYNC_NOT_READY:
             status = conn.nonblocking_connect_run()
-            print("conn not yet")
 
         cursor = conn.cursor(cursorclass=cursors.NBCursor)
         status = cursor.execute("SELECT SLEEP(0.05) UNION SELECT SLEEP(0.05)")
         while status == ASYNC.NET_ASYNC_NOT_READY:
-            print("query not yet")
             status = cursor.execute_nonblocking()
 
-        print("query done")
         status = ASYNC.NET_ASYNC_NOT_READY
+        num_rows = 0
         while True:
-            print("checking for row")
             status, row = cursor.fetchone_nonblocking()
-            print(status)
-            print(row)
+            num_rows += 1
             if not row:
                 break
-        print("yay done")
+        self.assertEquals(num_rows, 2)
 
 
     def test_transactions(self):
