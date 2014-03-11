@@ -213,7 +213,7 @@ class Connection(_mysql.connection):
             return string_decoder
 
         self._c_string_literal = _get_string_literal()
-        self._c_unicode_literal = unicode_literal = _get_unicode_literal()
+        self.unicode_literal = unicode_literal = _get_unicode_literal()
         self.string_decoder = string_decoder = _get_string_decoder()
 
         if not self._c_charset:
@@ -246,7 +246,7 @@ class Connection(_mysql.connection):
             self.converter[FIELD_TYPE.BLOB].append((None, self.string_decoder))
 
         self.encoders[types.StringType] = self._c_string_literal
-        self.encoders[types.UnicodeType] = self._c_unicode_literal
+        self.encoders[types.UnicodeType] = self.unicode_literal
         self._transactional = self.server_capabilities & CLIENT.TRANSACTIONS
         if self._transactional:
             if self._c_enable_autocommit is not None and not self._c_nonblocking:
@@ -332,7 +332,7 @@ class Connection(_mysql.connection):
                 self.query('SET NAMES %s' % charset)
                 self.store_result()
         self.string_decoder.charset = py_charset
-        self._c_unicode_literal.charset = py_charset
+        self.unicode_literal.charset = py_charset
 
     def set_sql_mode(self, sql_mode):
         """Set the connection sql_mode. See MySQL documentation for
