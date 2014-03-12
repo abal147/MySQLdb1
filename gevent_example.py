@@ -10,9 +10,9 @@ from MySQLdb import cursors
 def wait_for_action(connection):
     operation = connection.get_blocking_operation()
     fd = connection.get_file_descriptor()
-    if operation == ASYNC.NET_ASYNC_OP_READING:
+    if operation == ASYNC.NET_NONBLOCKING_READ:
         gevent.socket.wait_read(fd)
-    elif operation == ASYNC.NET_ASYNC_OP_WRITING:
+    elif operation == ASYNC.NET_NONBLOCKING_WRITE or operation == ASYNC.NET_NONBLOCKING_CONNECT:
         gevent.socket.wait_write(fd)
     else:
         raise RuntimeError("Unexpected operation blocking type: %d" % operation)

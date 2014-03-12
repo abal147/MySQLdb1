@@ -1229,7 +1229,7 @@ _mysql_get_blocking_operation(
 	PyObject *args)
 {
 	if (!PyArg_ParseTuple(args, "")) return NULL;
-        return PyInt_FromLong(self->connection.net.async_operation);
+        return PyInt_FromLong(self->connection.net.async_blocking_state);
 }
 
 static char _mysql_string_literal__doc__[] =
