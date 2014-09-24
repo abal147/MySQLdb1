@@ -90,6 +90,10 @@ typedef struct {
 	PyObject *converter;
         /* nonblocking requires the query body stay in memory during execution */
         PyObject *current_nonblocking_query;
+        PyObject *current_nonblocking_host;
+        PyObject *current_nonblocking_username;
+        PyObject *current_nonblocking_password;
+        PyObject *current_nonblocking_dbname;
 } _mysql_ConnectionObject;
 
 #define check_connection(c) if (!(c->open)) return _mysql_Exception(c)
@@ -597,6 +601,10 @@ _mysql_ConnectionObject_Initialize(
 	
 	self->converter = NULL;
 	self->open = 0;
+	self->current_nonblocking_username = NULL;
+	self->current_nonblocking_password = NULL;
+	self->current_nonblocking_host = NULL;
+	self->current_nonblocking_dbname = NULL;
 	check_server_init(-1);
 
 	if (!PyArg_ParseTupleAndKeywords(args, kwargs,
@@ -715,6 +723,31 @@ _mysql_ConnectionObject_Initialize(
 	  conn = mysql_real_connect(&(self->connection), host, user, passwd, db,
 				    port, unix_socket, client_flag);
 	} else {
+	  /* We need our string parameters to be valid throughout the
+	     nonblocking connect, like the query, so we create objects
+	     to hold the reference. It would be cleaner to just keep
+	     the objects passed in from the function but that would
+	     make the diff less localized. */
+	  if (user) {
+	    self->current_nonblocking_username = PyString_FromString(user);
+	    user = PyString_AsString(self->current_nonblocking_username);
+	  }
+
+	  if (host) {
+	    self->current_nonblocking_host = PyString_FromString(host);
+	    host = PyString_AsString(self->current_nonblocking_host);
+	  }
+
+	  if (passwd) {
+	    self->current_nonblocking_password = PyString_FromString(passwd);
+	    passwd = PyString_AsString(self->current_nonblocking_password);
+	  }
+
+	  if (db) {
+	    self->current_nonblocking_dbname = PyString_FromString(db);
+	    db = PyString_AsString(self->current_nonblocking_dbname);
+	  }
+
 	  int res = mysql_real_connect_nonblocking_init(&(self->connection), host, user, passwd, db,
 							port, unix_socket, client_flag);
 	  if (!res) {
@@ -2451,6 +2484,18 @@ _mysql_ConnectionObject_dealloc(
 	if (self->open) {
 		o = _mysql_ConnectionObject_close(self, NULL);
 		Py_XDECREF(o);
+	}
+	if (self->current_nonblocking_username) {
+	  Py_DECREF(self->current_nonblocking_username);
+	}
+	if (self->current_nonblocking_password) {
+	  Py_DECREF(self->current_nonblocking_password);
+	}
+	if (self->current_nonblocking_host) {
+	  Py_DECREF(self->current_nonblocking_host);
+	}
+	if (self->current_nonblocking_dbname) {
+	  Py_DECREF(self->current_nonblocking_dbname);
 	}
 	MyFree(self);
 }
