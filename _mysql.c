@@ -1167,7 +1167,13 @@ _mysql_escape_string(
 	PyObject *str;
 	char *in, *out;
 	int len, size;
-	if (!PyArg_ParseTuple(args, "y#:escape_string", &in, &size)) return NULL;
+#ifdef IS_PY3K
+ 	static const char* format = "y#:escape_string";
+#else
+	static const char* format = "s#:escape_string";
+#endif
+       if (!PyArg_ParseTuple(args, format, &in, &size)) return NULL;
+
 	str = PyBytes_FromStringAndSize((char *) NULL, size*2+1);
 	if (!str) return PyErr_NoMemory();
 	out = PyBytes_AS_STRING(str);
@@ -1698,6 +1704,7 @@ _mysql__fetch_row_nonblocking(
 	PyObject *v;
 
 	*r = Py_None;
+	Py_INCREF(Py_None);
 	*status = mysql_fetch_row_nonblocking(self->result, &row);
 	if (*status == NET_ASYNC_NOT_READY) {
 	  return 1;
@@ -1710,6 +1717,7 @@ _mysql__fetch_row_nonblocking(
 	    return 0;
 	  }
 	  *r = v;
+	  Py_DECREF(Py_None);
 	  return 1;
 	}
 
@@ -1835,7 +1843,6 @@ _mysql_ResultObject_fetch_row_nonblocking(
 	  goto error;
 	}
 
-	Py_INCREF(row);
 	PyTuple_SET_ITEM(ret, 0, PyLong_FromLong(status));
 	PyTuple_SET_ITEM(ret, 1, row);
 	return ret;
