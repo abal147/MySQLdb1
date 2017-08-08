@@ -388,6 +388,7 @@ _mysql_ResultObject_Initialize(
 	int use=0; 
 	PyObject *conv=NULL;
 	int n, i;
+	int field_count;
 	MYSQL_FIELD *fields;
 
 	if (!PyArg_ParseTupleAndKeywords(args, kwargs, "O|iO", kwlist,
@@ -400,6 +401,7 @@ _mysql_ResultObject_Initialize(
 	else
 		Py_INCREF(conv);
 
+	field_count = mysql_field_count(&(conn->connection));
 	self->conn = (PyObject *) conn;
 	Py_INCREF(conn);
 	self->use = use;
@@ -411,7 +413,7 @@ _mysql_ResultObject_Initialize(
 	self->result = result;
 	Py_END_ALLOW_THREADS ;
 	if (!result) {
-		if (mysql_field_count(&(conn->connection)) > 0) {
+		if (field_count > 0) {
 		    _mysql_Exception(conn);
 		    return -1;
 		}
